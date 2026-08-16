@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: slipway
+      POSTGRES_PASSWORD: slipway_dev_password
+      POSTGRES_DB: slipway
+    ports:
+      - "5432:5432"
+    volumes:
+      - slipway_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  slipway_postgres_data:

@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ChannelState {
+  Provisioning
+  Available
+  Leased
+  Submitted
+  Failed
+  Resync
+  Draining
+  Merged
+}
+
+model Operator {
+  id                  String   @id @default(cuid())
+  username            String   @unique
+  passwordHash        String
+  treasuryPublicKey   String
+  treasurySecretEnc   String   // encrypted at application layer before storage
+  feeAccountPublicKey String
+  feeAccountSecretEnc String   // encrypted at application layer before storage
+  createdAt           DateTime @default(now())
+
+  tenants  Tenant[]
+  channels ChannelAccount[]
+  config   PoolConfig?
+}
+
+model Tenant {
+  id                       String   @id @default(cuid())
+  operatorId               String
+  operator                 Operator @relation(fields: [operatorId], references: [id])
+  name                     String
+  apiKeyHash               String   @unique
+  operationSourcePublicKey String
+  createdAt                DateTime @default(now())
+
+  leases Lease[]
+}
+
+model ChannelAccount {
+  id             String       @id @default(cuid())
+  operatorId     String
+  operator       Operator     @relation(fields: [operatorId], references: [id])
+  publicKey      String       @unique
+  secretKeyEnc   String       // encrypted at application layer before storage
+  state          ChannelState @default(Provisioning)
+  sequence       String       // stored as string; Stellar sequence numbers are int64
+  lastUsedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  leases Lease[]
+
+  @@index([operatorId, state])
+}
+
+model Lease {
+  id               String         @id @default(cuid())
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id])
+  channelAccountId String
+  channelAccount   ChannelAccount @relation(fields: [channelAccountId], references: [id])
+  envelopeXdr      String
+  status           String         // "leased" | "submitted" | "succeeded" | "failed" | "released" | "expired"
+  resultHash       String?
+  resultCode       String?
+  expiresAt        DateTime
+  createdAt        DateTime       @default(now())
+  resolvedAt       DateTime?
+
+  @@index([channelAccountId])
+  @@index([tenantId])
+}
+
+model PoolConfig {
+  operatorId          String   @id
+  operator            Operator @relation(fields: [operatorId], references: [id])
+  minChannels          Int     @default(10)
+  maxChannels          Int     @default(100)
+  safetyFactor         Float   @default(1.5)
+  leaseTimeoutSeconds  Int     @default(30)
+  updatedAt            DateTime @updatedAt
+}
+
+model MetricSnapshot {
+  id              String   @id @default(cuid())
+  operatorId      String
+  timestamp       DateTime @default(now())
+  throughputTps   Float
+  utilizationPct  Float
+  reserveCostXlm  Float
+  feeBalanceXlm   Float
+
+  @@index([operatorId, timestamp])
+}
