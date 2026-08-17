@@ -10,10 +10,13 @@
  */
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
-import { resyncChannel } from "../src/lib/lease-broker";
+import { resyncChannel, expireOverdueLeases } from "../src/lib/lease-broker";
 
 async function main() {
   console.log("== SLIPWAY reconciler ==\n");
+
+  const expiredCount = await expireOverdueLeases();
+  console.log(`Expired ${expiredCount} overdue lease(s).\n`);
 
   const operator = await prisma.operator.findUnique({
     where: { username: "test-operator" },

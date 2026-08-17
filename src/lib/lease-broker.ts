@@ -222,6 +222,35 @@ export async function releaseLease(leaseId: string): Promise<void> {
 }
 
 /**
+ * Reconciler step: finds every lease still "leased" but past its
+ * expiresAt, and moves both the lease and its channel to Resync — same
+ * treatment as an explicit release. A tenant that acquired a channel and
+ * never submitted must not hold it forever; per the spec, timeout goes
+ * to Resync rather than straight back to Available, because the tenant
+ * may still submit late.
+ */
+export async function expireOverdueLeases(): Promise<number> {
+  const overdue = await prisma.lease.findMany({
+    where: { status: "leased", expiresAt: { lt: new Date() } },
+  });
+
+  for (const lease of overdue) {
+    await prisma.$transaction([
+      prisma.lease.update({
+        where: { id: lease.id },
+        data: { status: "expired", resolvedAt: new Date() },
+      }),
+      prisma.channelAccount.update({
+        where: { id: lease.channelAccountId },
+        data: { state: "Resync" },
+      }),
+    ]);
+  }
+
+  return overdue.length;
+}
+
+/**
  * Reconciler step: re-reads on-chain sequence for every channel in
  * Resync and moves it back to Available with the corrected sequence.
  */
